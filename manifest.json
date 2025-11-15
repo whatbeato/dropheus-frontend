@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Extension Base",
-  "description": "A minimal cross-browser Chrome/Firefox extension scaffold (MV3).",
+  "name": "orphshipper",
+  "description": "find cheaper alternatives or detect dropshipping on etsy, amazon or ebay.",
   "version": "0.1.0",
   "action": {
     "default_title": "Extension Base",
@@ -22,7 +22,7 @@
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "extension-base@example.com",
+      "id": "im@lynn.pt",
       "strict_min_version": "109.0"
     }
   }
