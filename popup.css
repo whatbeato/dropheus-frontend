@@ -19,3 +19,50 @@ button {
     box-shadow: 0 2px 8px 0 #F1641E
 }
 
+#results {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 420px;    
+    overflow: auto;
+    width: 320px;     
+    padding-bottom: 6px;
+}
+
+.card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+}
+
+.thumb {
+  width: 64px;          
+  height: 64px;        
+  object-fit: cover;    
+  border-radius: 6px;
+  flex: 0 0 64px;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;         
+}
+
+.item-title {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #F1641E;
+}
+
+.price {
+  font-weight: 700;
+  color: #333;
+  font-size: 0.85rem;
+}
