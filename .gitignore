@@ -1,4 +1,3 @@
-node_modules/
 .webextension/
 .vscode/
 .DS_Store
