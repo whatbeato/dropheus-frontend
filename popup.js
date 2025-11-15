@@ -4,18 +4,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btn.addEventListener('click', async () => {
     clearResults();
-    setStatus('trying to find the product title...');
+    setStatus('trying to find the product title and price...');
 
     try {
-      const title = await getTitleFromActiveTab();
-      if (!title) {
+      const productInfo = await getProductInfoFromActiveTab();
+      if (!productInfo.title) {
         setStatus('could not find the title... are you on etsy, amazon or ebay?');
         return;
       }
 
       setStatus('Querying dropship API...');
       const apiHost = 'https://j4cswgw8gwk8wcs4o4ww0oks.fonz.pt';
-      const apiUrl = `${apiHost}/search/?q=${encodeURIComponent(title)}`;
+      const apiUrl = `${apiHost}/search/?q=${encodeURIComponent(productInfo.title)}`;
 
       const resp = await fetch(apiUrl, { headers: { Accept: 'application/json, text/plain, */*' } });
       if (!resp.ok) {
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       setStatus('Results:');
-      renderResults(data);
+      renderResults(data, productInfo.price);
     } catch (err) {
       console.error(err);
       setStatus('error: ' + (err.message || err));
@@ -63,11 +63,11 @@ document.addEventListener('DOMContentLoaded', () => {
     resultsEl.appendChild(p);
   }
 
-  async function getTitleFromActiveTab() {
+  async function getProductInfoFromActiveTab() {
     return new Promise((resolve, reject) => {
       try {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (!tabs || tabs.length === 0) return resolve('');
+          if (!tabs || tabs.length === 0) return resolve({ title: '', price: null });
           const tab = tabs[0];
 
           chrome.scripting.executeScript(
@@ -76,12 +76,34 @@ document.addEventListener('DOMContentLoaded', () => {
               func: () => {
                 try {
                   const host = (location && location.hostname) ? location.hostname.toLowerCase() : '';
+                  let title = '';
+                  let price = null;
 
                   if (host.includes('amazon.')) {
                     const amazonSel = document.getElementById('productTitle') || document.querySelector('#title span#productTitle') || document.getElementById('ebooksProductTitle') || document.querySelector('#title');
                     if (amazonSel) {
                       const txt = (amazonSel.innerText || amazonSel.textContent || '').trim();
-                      if (txt) return txt;
+                      if (txt) title = txt;
+                    }
+                    
+                    // Extract Amazon price
+                    const priceSelectors = [
+                      '.a-price .a-offscreen',
+                      '#priceblock_ourprice',
+                      '#priceblock_dealprice',
+                      '.a-price-whole',
+                      '#price_inside_buybox',
+                      '.a-color-price'
+                    ];
+                    for (const sel of priceSelectors) {
+                      const priceEl = document.querySelector(sel);
+                      if (priceEl) {
+                        const priceText = (priceEl.innerText || priceEl.textContent || '').trim();
+                        const match = priceText.match(/[\$\£\€]?\s*(\d+[,\.]?\d*\.?\d*)/);                        if (match) {
+                          price = parseFloat(match[1].replace(/,/g, ''));
+                          if (!isNaN(price)) break;
+                        }
+                      }
                     }
                   }
 
@@ -90,49 +112,99 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (ebaySel) {
                       let txt = (ebaySel.innerText || ebaySel.textContent || '').trim();
                       txt = txt.replace(/^Details\s+about\s*/i, '').trim();
-                      if (txt) return txt;
+                      if (txt) title = txt;
+                    }
+                    
+                    // Extract eBay price
+                    const priceSelectors = [
+                      '.x-price-primary .ux-textspans',
+                      '[itemprop="price"]',
+                      '.display-price',
+                      '#prcIsum',
+                      '#mm-saleDscPrc'
+                    ];
+                    for (const sel of priceSelectors) {
+                      const priceEl = document.querySelector(sel);
+                      if (priceEl) {
+                        const priceText = (priceEl.innerText || priceEl.textContent || priceEl.getAttribute('content') || '').trim();
+                        const match = priceText.match(/[\$\£\€]?\s*(\d+[,\.]?\d*\.?\d*)/);                        if (match) {
+                          price = parseFloat(match[1].replace(/,/g, ''));
+                          if (!isNaN(price)) break;
+                        }
+                      }
                     }
                   }
 
-                  const og = document.querySelector('meta[property="og:title"]') || document.querySelector('meta[name="og:title"]');
-                  if (og && og.content) return og.content.trim();
-
-                  const h1 = document.querySelector('h1');
-                  if (h1 && h1.innerText) return h1.innerText.trim();
-
-                  const titleSelectors = ['[data-test-listing-title]', '.product-title', '.title', '.listing-title', '.wt-text-body-03'];
-                  for (const s of titleSelectors) {
-                    const el = document.querySelector(s);
-                    if (el && (el.innerText || el.textContent)) return (el.innerText || el.textContent).trim();
+                  if (host.includes('etsy.')) {
+                    // Extract Etsy price
+                    const priceSelectors = [
+                      '[data-buy-box-region="price"]',
+                      '.wt-text-title-03',
+                      'p[class*="price"]'
+                    ];
+                    for (const sel of priceSelectors) {
+                      const priceEl = document.querySelector(sel);
+                      if (priceEl) {
+                        const priceText = (priceEl.innerText || priceEl.textContent || '').trim();
+                        const match = priceText.match(/[\$\£\€]?\s*(\d+[,\.]?\d*\.?\d*)/);                        if (match) {
+                          price = parseFloat(match[1].replace(/,/g, ''));
+                          if (!isNaN(price)) break;
+                        }
+                      }
+                    }
                   }
 
-                  if (document.title) return document.title.trim();
+                  // If no title found yet, try generic selectors
+                  if (!title) {
+                    const og = document.querySelector('meta[property="og:title"]') || document.querySelector('meta[name="og:title"]');
+                    if (og && og.content) title = og.content.trim();
+
+                    if (!title) {
+                      const h1 = document.querySelector('h1');
+                      if (h1 && h1.innerText) title = h1.innerText.trim();
+                    }
+
+                    if (!title) {
+                      const titleSelectors = ['[data-test-listing-title]', '.product-title', '.title', '.listing-title', '.wt-text-body-03'];
+                      for (const s of titleSelectors) {
+                        const el = document.querySelector(s);
+                        if (el && (el.innerText || el.textContent)) {
+                          title = (el.innerText || el.textContent).trim();
+                          break;
+                        }
+                      }
+                    }
+
+                    if (!title && document.title) title = document.title.trim();
+                  }
+
+                  return { title, price };
                 } catch (e) {
                 }
-                return '';
+                return { title: '', price: null };
               }
             },
             (injectionResults) => {
               try {
                 if (chrome.runtime.lastError) {
                   console.warn('scripting error', chrome.runtime.lastError.message);
-                  return resolve('');
+                  return resolve({ title: '', price: null });
                 }
                 const r = injectionResults && injectionResults[0] && injectionResults[0].result;
-                resolve(r || '');
+                resolve(r || { title: '', price: null });
               } catch (e) {
-                resolve('');
+                resolve({ title: '', price: null });
               }
             }
           );
         });
       } catch (e) {
-        resolve('');
+        resolve({ title: '', price: null });
       }
     });
   }
 
-  function renderResults(items) {
+  function renderResults(items, originalPrice) {
     clearResults();
 
     items.forEach(item => {
@@ -160,15 +232,44 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.tabs.create({ url: u });
       });
 
-      const price = document.createElement('div');
-      price.className = 'price';
-      if (typeof item.price !== 'undefined') price.textContent = `$${item.price}`;
+      const priceContainer = document.createElement('div');
+      priceContainer.className = 'price';
+      
+      if (typeof item.price !== 'undefined') {
+        const aliPrice = document.createElement('div');
+        aliPrice.textContent = `AliExpress: $${item.price}`;
+        priceContainer.appendChild(aliPrice);
+        
+        if (originalPrice && originalPrice > 0) {
+          const origPrice = document.createElement('div');
+          origPrice.textContent = `Original: $${originalPrice.toFixed(2)}`;
+          origPrice.style.fontSize = '0.9em';
+          origPrice.style.color = '#666';
+          priceContainer.appendChild(origPrice);
+          
+          const savings = originalPrice - item.price;
+          if (savings > 0) {
+            const savingsEl = document.createElement('div');
+            savingsEl.textContent = `Save: $${savings.toFixed(2)} (${((savings / originalPrice) * 100).toFixed(0)}%)`;
+            savingsEl.style.fontSize = '0.9em';
+            savingsEl.style.color = '#22c55e';
+            savingsEl.style.fontWeight = 'bold';
+            priceContainer.appendChild(savingsEl);
+          } else if (savings < 0) {
+            const moreExpensive = document.createElement('div');
+            moreExpensive.textContent = `$${Math.abs(savings).toFixed(2)} more expensive`;
+            moreExpensive.style.fontSize = '0.9em';
+            moreExpensive.style.color = '#ef4444';
+            priceContainer.appendChild(moreExpensive);
+          }
+        }
+      }
 
       card.appendChild(img);
       const meta = document.createElement('div');
       meta.className = 'meta';
       meta.appendChild(title);
-      meta.appendChild(price);
+      meta.appendChild(priceContainer);
       meta.appendChild(btn);
       card.appendChild(meta);
 
